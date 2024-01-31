@@ -245,10 +245,18 @@ var (
 )
 
 func permutation(data uint64, size int, n []int) uint64 {
-	if len(n) == 0 {
-		return 0
+	outSize := len(n)
+	result := uint64(0)
+	for i := 0; i < outSize; i++ {
+		j := n[i]
+		bit := (data >> (size - j)) & 1
+		result |= bit << (outSize - i - 1)
 	}
 
+	return result
+}
+
+func permutationIf(data uint64, size int, n []int) uint64 {
 	outSize := len(n)
 	result := uint64(0)
 	for i := 0; i < outSize; i++ {
@@ -269,10 +277,9 @@ func leftShift28(data uint64, count int) uint64 {
 	return ((data & 0xc00_0000) >> 26) | ((data & 0x3ff_ffff) << 2)
 }
 
-func makeKeys(key64 uint64) []uint64 {
+func makeKeys(key64 uint64, subKeys48 []uint64) {
 	pcKey56 := permutation(key64, 64, PC1)
 	c28, d28 := (pcKey56>>28)&0x0fffffff, (pcKey56>>0)&0x0fffffff
-	subKeys48 := make([]uint64, 0, 16)
 	for i := 0; i < 16; i++ {
 		c28 = leftShift28(c28, IterateShiftTable[i])
 		d28 = leftShift28(d28, IterateShiftTable[i])
@@ -280,8 +287,6 @@ func makeKeys(key64 uint64) []uint64 {
 		subKey48 := permutation(cd56, 56, PC2)
 		subKeys48 = append(subKeys48, subKey48)
 	}
-
-	return subKeys48
 }
 
 func desIP(data uint64) uint64 {
@@ -331,7 +336,8 @@ func desF(rData32 uint64, subKey48 uint64) uint64 {
 
 func desEncryptBlockUint(data64 uint64, key64 uint64) uint64 {
 	ipData64 := desIP(data64)
-	subKeys48 := makeKeys(key64)
+	subKeys48 := make([]uint64, 16)
+	makeKeys(key64, subKeys48)
 
 	dataL32, dataR32 := (ipData64>>32)&0xffffffff, (ipData64>>0)&0xffffffff
 	for i := 0; i < 16; i++ {
@@ -346,7 +352,8 @@ func desEncryptBlockUint(data64 uint64, key64 uint64) uint64 {
 
 func desDecryptBlockUint(data64 uint64, key64 uint64) uint64 {
 	ipData64 := desIP(data64)
-	subKeys48 := makeKeys(key64)
+	subKeys48 := make([]uint64, 16)
+	makeKeys(key64, subKeys48)
 
 	dataL32, dataR32 := (ipData64>>32)&0xffffffff, (ipData64>>0)&0xffffffff
 	for i := 0; i < 16; i++ {
@@ -357,6 +364,75 @@ func desDecryptBlockUint(data64 uint64, key64 uint64) uint64 {
 
 	finalData64 := (dataL32 << 32) | dataR32
 	return desIIP(finalData64)
+}
+
+type DES struct {
+	subKeys48 []uint64
+}
+
+func NewDES(key64 uint64) *DES {
+	des := &DES{}
+	des.subKeys48 = make([]uint64, 16)
+	makeKeys(key64, des.subKeys48)
+	return des
+}
+
+func (d *DES) EncryptUint64(data64 uint64) uint64 {
+	ipData64 := desIP(data64)
+
+	dataL32, dataR32 := (ipData64>>32)&0xffffffff, (ipData64>>0)&0xffffffff
+	for i := 0; i < 16; i++ {
+		nextL32 := dataR32
+		nextR32 := dataL32 ^ desF(dataR32, d.subKeys48[i])
+		dataL32, dataR32 = nextL32, nextR32
+	}
+
+	finalData64 := (dataL32 << 32) | dataR32
+	return desIIP(finalData64)
+}
+
+func (d *DES) EncryptBlock(in []byte, out []byte, offset int) error {
+	if len(in) != len(out) {
+		return errors.New("len(in) !=len(out)")
+	}
+
+	if offset+8 > len(in) {
+		return errors.New("offset+8 > len(in)")
+	}
+
+	inData := binary.BigEndian.Uint64(in[offset : offset+8])
+	outData := d.EncryptUint64(inData)
+	binary.BigEndian.PutUint64(out[offset:offset+8], outData)
+	return nil
+}
+
+func (d *DES) DecryptUint64(data64 uint64) uint64 {
+	ipData64 := desIP(data64)
+
+	dataL32, dataR32 := (ipData64>>32)&0xffffffff, (ipData64>>0)&0xffffffff
+	for i := 0; i < 16; i++ {
+		nextR32 := dataL32
+		nextL32 := dataR32 ^ desF(dataL32, d.subKeys48[15-i])
+		dataL32, dataR32 = nextL32, nextR32
+	}
+
+	finalData64 := (dataL32 << 32) | dataR32
+	return desIIP(finalData64)
+}
+
+func (d *DES) DecryptBlock(in []byte, out []byte, offset int) error {
+	if len(in) != len(out) {
+		return errors.New("len(in) !=len(out)")
+	}
+
+	if offset+8 > len(in) {
+		return errors.New("offset+8 > len(in)")
+	}
+
+	inData := binary.BigEndian.Uint64(in[offset : offset+8])
+	outData := d.DecryptUint64(inData)
+	binary.BigEndian.PutUint64(out[offset:offset+8], outData)
+	return nil
 }
 
 func DesEncryptBlock(in []byte, out []byte, offset int, key uint64) error {

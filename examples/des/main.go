@@ -9,6 +9,8 @@ import (
 func EncryptFile(in io.Reader, out io.Writer, key uint64) error {
 	inBlock := make([]byte, 8)
 	outBlock := make([]byte, 8)
+	cipher := NewDES(key)
+
 	for {
 		n, err := in.Read(inBlock)
 		if err != nil {
@@ -24,7 +26,7 @@ func EncryptFile(in io.Reader, out io.Writer, key uint64) error {
 			inBlock[i] = byte(pad)
 		}
 
-		err = DesEncryptBlock(inBlock, outBlock, 0, key)
+		err = cipher.EncryptBlock(inBlock, outBlock, 0)
 		if err != nil {
 			panic(err)
 		}
@@ -60,6 +62,7 @@ func findPadding(in []byte) int {
 func DecryptFile(in io.Reader, out io.Writer, key uint64) error {
 	inBlock := make([]byte, 8)
 	outBlock := make([]byte, 8)
+	cipher := NewDES(key)
 
 	var lastBlock []byte
 	for {
@@ -90,7 +93,7 @@ func DecryptFile(in io.Reader, out io.Writer, key uint64) error {
 			}
 		}
 
-		err = DesDecryptBlock(inBlock, outBlock, 0, key)
+		err = cipher.DecryptBlock(inBlock, outBlock, 0)
 		if err != nil {
 			panic(err)
 		}
