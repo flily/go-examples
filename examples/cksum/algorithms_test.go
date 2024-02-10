@@ -23,3 +23,17 @@ func TestInternetChecksum(t *testing.T) {
 		t.Errorf("got %04x; expected %04x", got, exp)
 	}
 }
+
+func TestBSDSum(t *testing.T) {
+	data := []byte{
+		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+	}
+
+	c := NewBSDChecksum()
+	_ = c.Update(data)
+	got := c.Checksum()
+	exp := uint64(0x0000_0000_0000_44cc)
+	if got != exp {
+		t.Errorf("got %016x; expected %016x", got, exp)
+	}
+}
