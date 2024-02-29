@@ -25,7 +25,7 @@ type ZipConfigure struct {
 	Files       []string
 }
 
-func zipAddRegularFile(conf *ZipConfigure, zipFile *ZipFile, filename string, info fs.FileInfo) error {
+func zipAddRegularFile(_ *ZipConfigure, zipFile *ZipFile, filename string, info fs.FileInfo) error {
 	sizeOriginal, sizeCompressed, err := zipFile.AddRegularFile(filename, info)
 	if err != nil {
 		return err
